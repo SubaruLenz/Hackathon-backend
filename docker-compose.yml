@@ -22,11 +22,11 @@ services:
       - net.ipv6.conf.all.forwarding=1
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "tailscale", "status"]
+      test: ["CMD", "sh", "-c", "tailscale status > /dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 60s
 
   api:
     build:

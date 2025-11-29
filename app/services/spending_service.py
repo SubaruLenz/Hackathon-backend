@@ -62,16 +62,28 @@ class SpendingService:
         """Delete a spending entry."""
         return self.storage.delete(spending_id)
 
-    def get_summary(self) -> Dict:
-        """Get summary statistics of all spendings."""
-        all_spendings = self.storage.get_all_spendings()
+    def get_summary(self, date: Optional[datetime] = None) -> Dict:
+        """
+        Get summary statistics of all spendings.
+        
+        Args:
+            date: Optional date to filter spendings by. If provided, returns summary for that specific date.
+            
+        Returns:
+            Dictionary with summary statistics including total_spendings, total_amount, by_category, and average_amount.
+        """
+        if date is not None:
+            all_spendings = self.storage.get_spendings_by_date(date)
+        else:
+            all_spendings = self.storage.get_all_spendings()
         
         if not all_spendings:
             return {
                 "total_spendings": 0,
                 "total_amount": 0.0,
                 "by_category": {},
-                "average_amount": 0.0
+                "average_amount": 0.0,
+                "date": date.date() if date else None
             }
 
         total_amount = sum(s.amount for s in all_spendings)
@@ -81,37 +93,50 @@ class SpendingService:
                 category_totals.get(spending.category, 0) + spending.amount
             )
 
-        return {
+        result = {
             "total_spendings": len(all_spendings),
             "total_amount": total_amount,
             "by_category": category_totals,
             "average_amount": total_amount / len(all_spendings)
         }
+        
+        if date is not None:
+            result["date"] = date.date() if isinstance(date, datetime) else date
+        
+        return result
 
     def get_categorized_spending(
         self,
         year: Optional[int] = None,
-        month: Optional[int] = None
+        month: Optional[int] = None,
+        date: Optional[datetime] = None
     ) -> SpendingVisualization:
         """
         Calculate categorized spending with percentages for visualization.
         
         Args:
-            year: Optional year filter (e.g., 2025)
-            month: Optional month filter (1-12)
+            year: Optional year filter (e.g., 2025). Ignored if date is provided.
+            month: Optional month filter (1-12). Ignored if date is provided.
+            date: Optional date filter. If provided, takes precedence over year/month.
             
         Returns:
             SpendingVisualization with categorized data and percentages
         """
-        # Get filtered spendings
-        spendings = self.storage.get_spendings_by_date_range(year=year, month=month)
+        # Get filtered spendings - date takes precedence over year/month
+        if date is not None:
+            spendings = self.storage.get_spendings_by_date(date)
+            filter_date = date.date() if isinstance(date, datetime) else date
+        else:
+            spendings = self.storage.get_spendings_by_date_range(year=year, month=month)
+            filter_date = None
         
         if not spendings:
             return SpendingVisualization(
                 total_amount=0.0,
                 total_count=0,
-                year=year,
-                month=month,
+                year=year if date is None else None,
+                month=month if date is None else None,
+                date=filter_date,
                 categories=[]
             )
 
@@ -143,8 +168,9 @@ class SpendingService:
         return SpendingVisualization(
             total_amount=round(total_amount, 2),
             total_count=total_count,
-            year=year,
-            month=month,
+            year=year if date is None else None,
+            month=month if date is None else None,
+            date=filter_date,
             categories=categories
         )
 

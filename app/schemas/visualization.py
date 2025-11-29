@@ -1,5 +1,6 @@
 """Schemas for spending visualization data."""
 
+from datetime import date as DateType
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
@@ -21,6 +22,7 @@ class SpendingVisualization(BaseModel):
     total_count: int = Field(..., description="Total number of spending entries")
     year: Optional[int] = Field(None, description="Filter year (if applied)")
     month: Optional[int] = Field(None, description="Filter month (if applied)")
+    date: Optional[DateType] = Field(None, description="Filter date (if applied)")
     categories: List[CategorySpending] = Field(
         ..., description="List of spending by category with percentages"
     )

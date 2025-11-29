@@ -1,5 +1,6 @@
 """Database storage implementation for spendings."""
 
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -90,6 +91,18 @@ class DatabaseStorage:
         if month is not None:
             query = query.filter(extract('month', Spending.date) == month)
 
+        db_spendings = query.order_by(Spending.date.desc()).all()
+        return [self._to_response(s) for s in db_spendings]
+
+    def get_spendings_by_date(self, date: datetime) -> List[SpendingResponse]:
+        """Get spendings filtered by a specific date."""
+        from sqlalchemy import func
+
+        # Filter by date (ignoring time component)
+        target_date = date.date() if isinstance(date, datetime) else date
+        query = self.db.query(Spending).filter(
+            func.date(Spending.date) == target_date
+        )
         db_spendings = query.order_by(Spending.date.desc()).all()
         return [self._to_response(s) for s in db_spendings]
 

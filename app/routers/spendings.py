@@ -1,9 +1,10 @@
 """Spending management endpoints."""
 
+from datetime import date, datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database.base import get_db
@@ -86,38 +87,52 @@ async def delete_spending(
 
 
 @router.get("/stats/summary")
-async def get_spending_summary(db: Session = Depends(get_db)):
-    """Get summary statistics of all spendings."""
+async def get_spending_summary(
+    date: Optional[date] = Query(None, description="Optional date to filter summary by (YYYY-MM-DD format)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get summary statistics of all spendings.
+    
+    - **date**: Optional date filter (YYYY-MM-DD format). If provided, returns summary for that specific date only.
+    
+    Returns summary statistics including total spendings, total amount, breakdown by category, and average amount.
+    """
     service = SpendingService(db)
-    return service.get_summary()
+    date_filter = datetime.combine(date, datetime.min.time()) if date else None
+    return service.get_summary(date=date_filter)
 
 
 @router.get("/stats/visualization", response_model=SpendingVisualization)
 async def get_spending_visualization(
     year: Optional[int] = None,
     month: Optional[int] = None,
+    date: Optional[date] = Query(None, description="Optional date to filter by (YYYY-MM-DD format). Takes precedence over year/month."),
     db: Session = Depends(get_db)
 ):
     """
     Get categorized spending data with percentages for visualization.
     
-    - **year**: Filter by year (e.g., 2025)
-    - **month**: Filter by month (1-12). Requires year to be specified.
+    - **year**: Filter by year (e.g., 2025). Ignored if date is provided.
+    - **month**: Filter by month (1-12). Requires year to be specified. Ignored if date is provided.
+    - **date**: Optional date filter (YYYY-MM-DD format). If provided, takes precedence over year/month filters.
     
     Returns categorized spending with percentages suitable for charts and graphs.
     """
-    if month is not None and year is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Month filter requires year to be specified"
-        )
-    
-    if month is not None and (month < 1 or month > 12):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Month must be between 1 and 12"
-        )
+    if date is None:
+        if month is not None and year is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Month filter requires year to be specified"
+            )
+        
+        if month is not None and (month < 1 or month > 12):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Month must be between 1 and 12"
+            )
     
     service = SpendingService(db)
-    return service.get_categorized_spending(year=year, month=month)
+    date_filter = datetime.combine(date, datetime.min.time()) if date else None
+    return service.get_categorized_spending(year=year, month=month, date=date_filter)
 
