@@ -1,6 +1,6 @@
 """Storage layer for data persistence."""
 
-from app.storage.in_memory import InMemoryStorage
+from app.storage.database import DatabaseStorage
 
-__all__ = ["InMemoryStorage"]
+__all__ = ["DatabaseStorage"]
 

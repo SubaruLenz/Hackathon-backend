@@ -4,15 +4,20 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
+from sqlalchemy.orm import Session
+
 from app.schemas.spending import SpendingCreate, SpendingResponse, SpendingUpdate
-from app.storage.in_memory import storage
+from app.schemas.visualization import CategorySpending, SpendingVisualization
+from app.storage.database import DatabaseStorage
 
 
 class SpendingService:
     """Service for managing spending operations."""
 
-    @staticmethod
-    def create_spending(spending_data: SpendingCreate) -> SpendingResponse:
+    def __init__(self, db: Session):
+        self.storage = DatabaseStorage(db)
+
+    def create_spending(self, spending_data: SpendingCreate) -> SpendingResponse:
         """Create a new spending entry."""
         new_spending = SpendingResponse(
             id=uuid4(),
@@ -22,25 +27,23 @@ class SpendingService:
             date=spending_data.date or datetime.now(),
             created_at=datetime.now()
         )
-        return storage.create(new_spending)
+        return self.storage.create(new_spending)
 
-    @staticmethod
-    def get_spendings(category: Optional[str] = None) -> List[SpendingResponse]:
+    def get_spendings(self, category: Optional[str] = None) -> List[SpendingResponse]:
         """Get all spendings, optionally filtered by category."""
-        return storage.get_all(category=category)
+        return self.storage.get_all(category=category)
 
-    @staticmethod
-    def get_spending_by_id(spending_id: UUID) -> Optional[SpendingResponse]:
+    def get_spending_by_id(self, spending_id: UUID) -> Optional[SpendingResponse]:
         """Get a spending by ID."""
-        return storage.get_by_id(spending_id)
+        return self.storage.get_by_id(spending_id)
 
-    @staticmethod
     def update_spending(
+        self,
         spending_id: UUID,
         spending_update: SpendingUpdate
     ) -> Optional[SpendingResponse]:
         """Update an existing spending entry."""
-        existing_spending = storage.get_by_id(spending_id)
+        existing_spending = self.storage.get_by_id(spending_id)
         if not existing_spending:
             return None
 
@@ -53,17 +56,15 @@ class SpendingService:
             date=update_data.get("date", existing_spending.date),
             created_at=existing_spending.created_at
         )
-        return storage.update(spending_id, updated_spending)
+        return self.storage.update(spending_id, updated_spending)
 
-    @staticmethod
-    def delete_spending(spending_id: UUID) -> bool:
+    def delete_spending(self, spending_id: UUID) -> bool:
         """Delete a spending entry."""
-        return storage.delete(spending_id)
+        return self.storage.delete(spending_id)
 
-    @staticmethod
-    def get_summary() -> Dict:
+    def get_summary(self) -> Dict:
         """Get summary statistics of all spendings."""
-        all_spendings = storage.get_all_spendings()
+        all_spendings = self.storage.get_all_spendings()
         
         if not all_spendings:
             return {
@@ -86,4 +87,64 @@ class SpendingService:
             "by_category": category_totals,
             "average_amount": total_amount / len(all_spendings)
         }
+
+    def get_categorized_spending(
+        self,
+        year: Optional[int] = None,
+        month: Optional[int] = None
+    ) -> SpendingVisualization:
+        """
+        Calculate categorized spending with percentages for visualization.
+        
+        Args:
+            year: Optional year filter (e.g., 2025)
+            month: Optional month filter (1-12)
+            
+        Returns:
+            SpendingVisualization with categorized data and percentages
+        """
+        # Get filtered spendings
+        spendings = self.storage.get_spendings_by_date_range(year=year, month=month)
+        
+        if not spendings:
+            return SpendingVisualization(
+                total_amount=0.0,
+                total_count=0,
+                year=year,
+                month=month,
+                categories=[]
+            )
+
+        # Calculate totals
+        total_amount = sum(s.amount for s in spendings)
+        total_count = len(spendings)
+
+        # Group by category and calculate totals
+        category_data: Dict[str, Dict[str, float]] = {}
+        for spending in spendings:
+            if spending.category not in category_data:
+                category_data[spending.category] = {"amount": 0.0, "count": 0}
+            category_data[spending.category]["amount"] += spending.amount
+            category_data[spending.category]["count"] += 1
+
+        # Create category spending list with percentages
+        categories = []
+        for category, data in sorted(category_data.items(), key=lambda x: x[1]["amount"], reverse=True):
+            percentage = (data["amount"] / total_amount * 100) if total_amount > 0 else 0.0
+            categories.append(
+                CategorySpending(
+                    category=category,
+                    amount=round(data["amount"], 2),
+                    percentage=round(percentage, 2),
+                    count=data["count"]
+                )
+            )
+
+        return SpendingVisualization(
+            total_amount=round(total_amount, 2),
+            total_count=total_count,
+            year=year,
+            month=month,
+            categories=categories
+        )
 
